@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Админка{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center">
+  <h1 style="margin:0">Диспетчерская</h1>
+  <form method="post" action="/admin/logout" style="margin:0">
+    <button type="submit" style="width:auto;padding:6px 12px;margin:0;background:#666">Выйти</button>
+  </form>
+</div>
+
+{% if request.query_params.get("error") %}
+  <p class="error">{{ request.query_params.get("error") }}</p>
+{% endif %}
+
+<div class="card" style="margin-top:16px">
+  <h2 style="font-size:16px;margin-top:0">Добавить бронь вручную</h2>
+  <form method="post" action="/admin/bookings/manual">
+    <label>Техника</label>
+    <select name="equipment_id" required style="width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px">
+      {% for e in equipment %}
+        <option value="{{ e.id }}">{{ e.name }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Дата</label>
+    <input type="date" name="date" required>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <label>С</label>
+        <input type="time" name="time_from" required>
+      </div>
+      <div style="flex:1">
+        <label>До</label>
+        <input type="time" name="time_to" required>
+      </div>
+    </div>
+
+    <label>Объект / комментарий</label>
+    <input type="text" name="address" required placeholder="ТО, ремонт, объект...">
+
+    <button type="submit">Добавить</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin-top:0">Все бронирования</h2>
+
+  {% if not rows %}
+    <p class="muted" style="font-size:14px">Пока пусто.</p>
+  {% else %}
+    <table style="width:100%;border-collapse:collapse;font-size:14px">
+      <thead>
+        <tr style="text-align:left;border-bottom:1px solid #ddd">
+          <th style="padding:8px 4px">Техника</th>
+          <th style="padding:8px 4px">Период</th>
+          <th style="padding:8px 4px">Объект</th>
+          <th style="padding:8px 4px">Клиент</th>
+          <th style="padding:8px 4px">Сумма</th>
+          <th style="padding:8px 4px">Статус</th>
+          <th style="padding:8px 4px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        {% set b = row.booking %}
+        <tr style="border-bottom:1px solid #f0f0f0">
+          <td style="padding:8px 4px">{{ b.equipment.name }}</td>
+          <td style="padding:8px 4px">
+            {{ b.start_at.strftime("%d.%m.%Y") }}<br>
+            <span class="muted">{{ b.start_at.strftime("%H:%M") }}–{{ b.end_at.strftime("%H:%M") }}</span>
+          </td>
+          <td style="padding:8px 4px">{{ b.address }}</td>
+          <td style="padding:8px 4px">
+            {{ b.customer_name }}<br>
+            <span class="muted">{{ b.customer_phone }}</span>
+          </td>
+          <td style="padding:8px 4px">
+            {{ "{:,}".format(row.cost.rent).replace(",", " ") }} ₽<br>
+            <span class="muted">{{ row.cost.hours }} ч</span>
+          </td>
+          <td style="padding:8px 4px">
+            {% if b.status.value == "PENDING" %}
+              <span style="color:#c80">заявка</span>
+            {% elif b.status.value == "CONFIRMED" %}
+              <span style="color:#080">подтверждена</span>
+            {% else %}
+              <span style="color:#666">занято</span>
+            {% endif %}
+          </td>
+          <td style="padding:8px 4px;white-space:nowrap">
+            {% if b.status.value == "PENDING" %}
+              <form method="post" action="/admin/bookings/{{ b.id }}/confirm" style="display:inline">
+                <button type="submit" style="width:auto;padding:4px 10px;margin:0;font-size:12px">Подтвердить</button>
+              </form>
+            {% endif %}
+            <form method="post" action="/admin/bookings/{{ b.id }}/delete" style="display:inline">
+              <button type="submit" style="width:auto;padding:4px 10px;margin:0;font-size:12px;background:#c00">Удалить</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }}{% endblock %}
+
+{% block content %}
+<a href="/" class="muted" style="font-size:14px">← Назад к каталогу</a>
+
+<h1 style="margin:12px 0 4px">{{ item.name }}</h1>
+<p class="muted" style="margin-top:0">{{ item.type }}</p>
+
+<div class="card">
+  <h2 style="font-size:16px;margin-top:0">Характеристики</h2>
+  {% for key, value in item.specs.items() %}
+    <div class="row">
+      <span class="muted">{{ key }}</span>
+      <span><b>{% if value is sameas true %}есть{% else %}{{ value }}{% endif %}</b></span>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <div class="row">
+    <span class="muted">Ставка</span>
+    <span><b>{{ "{:,}".format(item.hourly_rate).replace(",", " ") }} ₽/час</b></span>
+  </div>
+  <div class="row">
+    <span class="muted">Залог (возвращается)</span>
+    <span>{{ "{:,}".format(item.deposit).replace(",", " ") }} ₽</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin-top:0">Занятость</h2>
+  {% if busy %}
+    {% for b in busy %}
+      <div style="font-size:14px">
+        {{ b.start_at.strftime("%d.%m.%Y") }}:
+        {{ b.start_at.strftime("%H:%M") }}–{{ b.end_at.strftime("%H:%M") }} — занято
+      </div>
+    {% endfor %}
+  {% else %}
+    <p class="muted" style="font-size:14px;margin:0">Пока нет бронирований — техника свободна.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="font-size:16px;margin-top:0">Оформить заявку</h2>
+
+  <form method="post" action="/equipment/{{ item.id }}/book">
+    <label>Дата</label>
+    <input type="date" name="date" id="date" required>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1">
+        <label>С</label>
+        <input type="time" name="time_from" id="time_from">
+      </div>
+      <div style="flex:1">
+        <label>До</label>
+        <input type="time" name="time_to" id="time_to">
+      </div>
+    </div>
+
+    <div id="calc" class="calc" style="display:none"></div>
+    <div id="too-short" class="error" style="display:none">
+      Минимальное время аренды — {{ min_hours }} часа.
+    </div>
+
+    <label>Имя</label>
+    <input type="text" name="name" required>
+
+    <label>Телефон</label>
+    <input type="tel" name="phone" placeholder="+7" required>
+
+    <label>Адрес объекта</label>
+    <input type="text" name="address" required>
+
+    <label style="display:flex;gap:8px;align-items:center;margin-top:16px">
+      <input type="checkbox" name="agree" value="1" required style="width:auto">
+      <span>Согласен на обработку персональных данных</span>
+    </label>
+
+    <button type="submit">Отправить заявку</button>
+  </form>
+
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if success %}<p class="success">{{ success }}</p>{% endif %}
+</div>
+
+<script>
+  const RATE = {{ item.hourly_rate }};
+  const DEPOSIT = {{ item.deposit }};
+  const MIN_HOURS = {{ min_hours }};
+
+  const fmt = n => n.toLocaleString("ru-RU");
+
+  function recalc() {
+    const from = document.getElementById("time_from").value;
+    const to = document.getElementById("time_to").value;
+    const calc = document.getElementById("calc");
+    const tooShort = document.getElementById("too-short");
+
+    if (!from || !to) {
+      calc.style.display = "none";
+      tooShort.style.display = "none";
+      return;
+    }
+
+    const [fh, fm] = from.split(":").map(Number);
+    const [th, tm] = to.split(":").map(Number);
+    const rawHours = (th * 60 + tm - (fh * 60 + fm)) / 60;
+
+    if (rawHours > 0 && rawHours < MIN_HOURS) {
+      tooShort.style.display = "block";
+      calc.style.display = "none";
+      return;
+    }
+    tooShort.style.display = "none";
+
+    if (rawHours <= 0) {
+      calc.style.display = "none";
+      return;
+    }
+
+    const billedHours = Math.ceil(rawHours);          // округляем вверх
+    const rent = billedHours * RATE;
+    const total = rent + DEPOSIT;
+
+    // подсказка, если фактическое время не целое
+    const note = billedHours !== rawHours
+      ? `<div class="muted" style="font-size:12px;margin-top:6px">
+           Фактически ${rawHours} ч — оплата округляется до полного часа.
+         </div>`
+      : "";
+
+    calc.innerHTML = `
+      <div class="row"><span class="muted">Аренда (${billedHours} ч × ${fmt(RATE)} ₽)</span><span>${fmt(rent)} ₽</span></div>
+      <div class="row"><span class="muted">Залог (возвращается)</span><span>${fmt(DEPOSIT)} ₽</span></div>
+      <div class="row" style="border-top:1px solid #ddd;margin-top:6px;padding-top:6px">
+        <span><b>К оплате</b></span><span><b>${fmt(total)} ₽</b></span>
+      </div>
+      ${note}`;
+    calc.style.display = "block";
+  }
+
+  document.getElementById("time_from").addEventListener("change", recalc);
+  document.getElementById("time_to").addEventListener("change", recalc);
+</script>
+{% endblock %}

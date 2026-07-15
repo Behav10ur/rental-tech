@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Вход в админку{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:400px;margin:60px auto">
+  <h1 style="font-size:20px;margin-top:0">Вход в админку</h1>
+  <form method="post" action="/admin/login">
+    <label>Пароль</label>
+    <input type="password" name="password" required autofocus>
+    <button type="submit">Войти</button>
+  </form>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+</div>
+{% endblock %}

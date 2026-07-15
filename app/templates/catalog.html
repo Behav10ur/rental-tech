@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Аренда спецтехники</h1>
+<p class="muted">Выберите технику для бронирования</p>
+
+<div class="grid">
+  {% for item in items %}
+  <div class="card">
+    {% if item.photo_url %}
+      <img src="{{ item.photo_url }}" alt="{{ item.name }}" class="photo">
+    {% else %}
+      <div class="photo">Фото скоро появится</div>
+    {% endif %}
+
+    <h2 style="font-size:18px;margin:0">{{ item.name }}</h2>
+    <p class="muted" style="margin:4px 0 12px">{{ item.type }}</p>
+
+    {% for key, value in item.specs.items() %}
+      <div class="row">
+        <span class="muted">{{ key }}</span>
+        <span><b>{% if value is sameas true %}есть{% else %}{{ value }}{% endif %}</b></span>
+      </div>
+    {% endfor %}
+
+    <hr style="border:0;border-top:1px solid #eee;margin:12px 0">
+
+    <div class="row">
+      <span class="muted">Ставка</span>
+      <span><b>{{ "{:,}".format(item.hourly_rate).replace(",", " ") }} ₽/час</b></span>
+    </div>
+    <div class="row">
+      <span class="muted">Залог</span>
+      <span>{{ "{:,}".format(item.deposit).replace(",", " ") }} ₽</span>
+    </div>
+
+    <a href="/equipment/{{ item.id }}" class="btn-link">Забронировать</a>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
