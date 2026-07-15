@@ -1,6 +1,9 @@
 import os
+from dotenv import load_dotenv
 from itsdangerous import URLSafeSerializer, BadSignature
 from fastapi import Request
+
+load_dotenv()
 
 COOKIE_NAME = "admin_session"
 _serializer = URLSafeSerializer(os.environ["SECRET_KEY"], salt="admin-auth")
