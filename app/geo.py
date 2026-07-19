@@ -15,8 +15,11 @@ _API_KEY = os.environ["DADATA_API_KEY"]
 _SECRET_KEY = os.environ["DADATA_SECRET_KEY"]
 
 
-def geocode(address: str) -> tuple[float, float] | None:
-    """Адрес → (широта, долгота). None, если не удалось определить."""
+def geocode(address: str) -> dict | None:
+    """
+    Адрес → dict с координатами, качеством и распознанным адресом.
+    None при сетевой ошибке.
+    """
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -36,11 +39,14 @@ def geocode(address: str) -> tuple[float, float] | None:
     item = data[0]
     lat = item.get("geo_lat")
     lon = item.get("geo_lon")
-    if lat is None or lon is None:
-        return None
 
-    return float(lat), float(lon)
-
+    return {
+        "lat": float(lat) if lat is not None else None,
+        "lon": float(lon) if lon is not None else None,
+        "qc_geo": item.get("qc_geo"),          # точность координат
+        "unparsed": item.get("unparsed_parts"),# нераспознанные части
+        "result": item.get("result"),          # распознанный адрес
+    }
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Расстояние по прямой между двумя точками на Земле, км."""
@@ -55,23 +61,37 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 def logistics_for_address(address: str) -> dict:
     """
     Считает логистику по адресу объекта.
-    Возвращает dict со статусом:
-      - ok=True, cost, distance_km, extra_km  — обслуживаем
-      - ok=False, reason                       — не обслуживаем / не распознан адрес
+      ok=True  → cost, distance_km, extra_km, recognized
+      ok=False → reason
     """
-    coords = geocode(address)
-    if coords is None:
-        return {"ok": False, "reason": "Не удалось определить адрес. Уточните его."}
+    geo = geocode(address)
+    if geo is None:
+        return {"ok": False, "reason": "Сервис адресов недоступен. Попробуйте позже."}
 
-    lat, lon = coords
-    distance = haversine_km(ORIGIN_LAT, ORIGIN_LON, lat, lon)
+    # координаты не определены до точки (qc_geo 4) или адрес не разобран
+    if geo["qc_geo"] == 4 or geo["lat"] is None or geo["lon"] is None:
+        return {
+            "ok": False,
+            "reason": "Не удалось точно определить адрес. Укажите населённый пункт и улицу подробнее.",
+        }
 
-    # внутри объездной — бесплатно
+    # часть адреса не распознана — вероятно, опечатка или лишнее
+    if geo["unparsed"]:
+        return {
+            "ok": False,
+            "reason": f"Адрес распознан не полностью (не понято: «{geo['unparsed']}»). Уточните его.",
+        }
+
+    distance = haversine_km(ORIGIN_LAT, ORIGIN_LON, geo["lat"], geo["lon"])
+
     if distance <= BELTWAY_RADIUS_KM:
-        return {"ok": True, "cost": 0, "distance_km": round(distance, 1), "extra_km": 0}
+        return {
+            "ok": True, "cost": 0,
+            "distance_km": round(distance, 1), "extra_km": 0,
+            "recognized": geo["result"],
+        }
 
-    extra = distance - BELTWAY_RADIUS_KM  # км сверх объездной
-
+    extra = distance - BELTWAY_RADIUS_KM
     if extra > MAX_EXTRA_KM:
         return {
             "ok": False,
@@ -80,8 +100,7 @@ def logistics_for_address(address: str) -> dict:
 
     cost = round(extra) * PRICE_PER_KM
     return {
-        "ok": True,
-        "cost": cost,
-        "distance_km": round(distance, 1),
-        "extra_km": round(extra),
+        "ok": True, "cost": cost,
+        "distance_km": round(distance, 1), "extra_km": round(extra),
+        "recognized": geo["result"],
     }

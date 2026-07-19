@@ -79,6 +79,9 @@
           <td style="padding:8px 4px">
             {{ "{:,}".format(row.cost.rent).replace(",", " ") }} ₽<br>
             <span class="muted">{{ row.cost.hours }} ч</span>
+            {% if row.cost.logistics > 0 %}
+              <br><span class="muted">+ {{ "{:,}".format(row.cost.logistics).replace(",", " ") }} ₽ доставка</span>
+            {% endif %}
           </td>
           <td style="padding:8px 4px">
             {% if b.status.value == "PENDING" %}

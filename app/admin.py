@@ -68,7 +68,7 @@ def dashboard(
     # считаем стоимость для каждой брони
     rows = []
     for b in bookings:
-        cost = booking_cost(b.equipment, b.start_at, b.end_at)
+        cost = booking_cost(b.equipment, b.start_at, b.end_at, b.logistics_cost)
         rows.append({"booking": b, "cost": cost})
 
     return templates.TemplateResponse(

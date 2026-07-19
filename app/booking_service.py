@@ -69,7 +69,7 @@ def billed_hours(start_at: datetime, end_at: datetime) -> int:
     return math.ceil(raw)
 
 
-def booking_cost(equipment: Equipment, start_at: datetime, end_at: datetime) -> dict:
+def booking_cost(equipment: Equipment, start_at: datetime, end_at: datetime, logistics_cost: int = 0) -> dict:
     """Разбивка стоимости брони."""
     hours = billed_hours(start_at, end_at)
     rent = hours * equipment.hourly_rate
@@ -77,5 +77,6 @@ def booking_cost(equipment: Equipment, start_at: datetime, end_at: datetime) -> 
         "hours": hours,
         "rent": rent,
         "deposit": equipment.deposit,
-        "total": rent + equipment.deposit,
+        "logistics": logistics_cost,
+        "total": rent + equipment.deposit + logistics_cost,
     }

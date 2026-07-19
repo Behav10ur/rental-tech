@@ -180,10 +180,11 @@
       deliveryCost = data.cost;
       document.getElementById("logistics_cost").value = data.cost;
 
+      const recognized = data.recognized ? `<br><span class="muted" style="font-size:12px">Распознан адрес: ${data.recognized}</span>` : "";
       if (data.cost === 0) {
-        box.innerHTML = `<span style="color:#080">В черте города — доставка бесплатно (${data.distance_km} км).</span>`;
+        box.innerHTML = `<span style="color:#080">В черте города — доставка бесплатно (${data.distance_km} км).</span>${recognized}`;
       } else {
-        box.innerHTML = `<span style="color:#080">Доставка: ${fmt(data.cost)} ₽ (${data.extra_km} км сверх объездной).</span>`;
+        box.innerHTML = `<span style="color:#080">Доставка: ${fmt(data.cost)} ₽ (${data.extra_km} км сверх объездной).</span>${recognized}`;
       }
       recalc();
     } catch {
