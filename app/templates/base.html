@@ -28,6 +28,15 @@
   </style>
 </head>
 <body>
-  {% block content %}{% endblock %}
+{% block content %}{% endblock %}
+
+  <footer style="margin-top:48px;padding-top:24px;border-top:1px solid #eee;font-size:13px;color:#777">
+    <p style="margin:4px 0"><b>[Название организации]</b> · ИНН [____] · ОГРН [____]</p>
+    <p style="margin:4px 0">Адрес: [____] · Телефон: [____] · Email: [____]</p>
+    <p style="margin:4px 0">
+      <a href="/privacy" style="color:#777">Политика обработки персональных данных</a>
+    </p>
+    <p style="margin:12px 0 0;color:#aaa">© {{ current_year }} Аренда спецтехники</p>
+  </footer>
 </body>
 </html>

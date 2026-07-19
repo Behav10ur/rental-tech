@@ -1,8 +1,7 @@
 from datetime import datetime
-from app.admin import router as admin_router
 
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,10 +10,14 @@ from app.db import get_db
 from app.models import Equipment, Booking, BookingStatus
 from app.booking_service import busy_intervals, validate_slot
 from app.rules import MIN_HOURS
+from app.flash import set_flash, pop_flash
+from app.admin import router as admin_router
 
 app = FastAPI(title="Аренда спецтехники")
-app.include_router(admin_router)
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["current_year"] = datetime.now().year
+
+app.include_router(admin_router)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -33,23 +36,28 @@ def equipment_page(
     if not item:
         raise HTTPException(status_code=404, detail="Техника не найдена")
 
-    return templates.TemplateResponse(
+    flash = pop_flash(request)
+    response = templates.TemplateResponse(
         request,
         "equipment.html",
         {
             "item": item,
             "busy": busy_intervals(db, equipment_id),
-            "error": None,
-            "success": None,
+            "error": flash["message"] if flash and flash["category"] == "error" else None,
+            "success": flash["message"] if flash and flash["category"] == "success" else None,
             "min_hours": MIN_HOURS,
         },
     )
+    response.delete_cookie("flash")
+    return response
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy(request: Request):
+    return templates.TemplateResponse(request, "privacy.html", {})
 
-@app.post("/equipment/{equipment_id}/book", response_class=HTMLResponse)
+@app.post("/equipment/{equipment_id}/book")
 def create_booking(
     equipment_id: int,
-    request: Request,
     db: Session = Depends(get_db),
     date: str = Form(...),
     time_from: str = Form(...),
@@ -63,31 +71,23 @@ def create_booking(
     if not item:
         raise HTTPException(status_code=404, detail="Техника не найдена")
 
-    def render(error=None, success=None):
-        return templates.TemplateResponse(
-            request,
-            "equipment.html",
-            {
-                "item": item,
-                "busy": busy_intervals(db, equipment_id),
-                "error": error,
-                "success": success,
-                "min_hours": MIN_HOURS,
-            },
-        )
+    redirect = RedirectResponse(f"/equipment/{equipment_id}", status_code=303)
 
     if not agree:
-        return render(error="Нужно согласие на обработку персональных данных.")
+        set_flash(redirect, "error", "Нужно согласие на обработку персональных данных.")
+        return redirect
 
     try:
         start_at = datetime.fromisoformat(f"{date}T{time_from}")
         end_at = datetime.fromisoformat(f"{date}T{time_to}")
     except ValueError:
-        return render(error="Некорректная дата или время.")
+        set_flash(redirect, "error", "Некорректная дата или время.")
+        return redirect
 
     error = validate_slot(db, equipment_id, start_at, end_at)
     if error:
-        return render(error=error)
+        set_flash(redirect, "error", error)
+        return redirect
 
     db.add(
         Booking(
@@ -102,4 +102,5 @@ def create_booking(
     )
     db.commit()
 
-    return render(success="Заявка отправлена! Мы свяжемся с вами.")
+    set_flash(redirect, "success", "Заявка отправлена! Мы свяжемся с вами.")
+    return redirect
