@@ -42,6 +42,8 @@ class Booking(Base):
     customer_name: Mapped[str] = mapped_column(String(200))
     customer_phone: Mapped[str] = mapped_column(String(50))
 
+    logistics_cost: Mapped[int] = mapped_column(Integer, default=0)  # ₽ за доставку
+    
     status: Mapped[BookingStatus] = mapped_column(
         Enum(BookingStatus, name="booking_status"), default=BookingStatus.PENDING
     )

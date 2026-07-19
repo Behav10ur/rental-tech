@@ -1,4 +1,8 @@
 from datetime import datetime
+from app.rules import MIN_HOURS, WORK_START_HOUR, WORK_END_HOUR
+
+from fastapi.responses import JSONResponse
+from app.geo import logistics_for_address
 
 from fastapi import FastAPI, Depends, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -9,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Equipment, Booking, BookingStatus
 from app.booking_service import busy_intervals, validate_slot
-from app.rules import MIN_HOURS
 from app.flash import set_flash, pop_flash
 from app.admin import router as admin_router
 
@@ -46,6 +49,8 @@ def equipment_page(
             "error": flash["message"] if flash and flash["category"] == "error" else None,
             "success": flash["message"] if flash and flash["category"] == "success" else None,
             "min_hours": MIN_HOURS,
+            "work_start": WORK_START_HOUR,
+            "work_end": WORK_END_HOUR,
         },
     )
     response.delete_cookie("flash")
@@ -54,6 +59,11 @@ def equipment_page(
 @app.get("/privacy", response_class=HTMLResponse)
 def privacy(request: Request):
     return templates.TemplateResponse(request, "privacy.html", {})
+
+@app.post("/api/logistics")
+def calc_logistics(address: str = Form(...)):
+    result = logistics_for_address(address.strip())
+    return JSONResponse(result)
 
 @app.post("/equipment/{equipment_id}/book")
 def create_booking(
@@ -89,6 +99,12 @@ def create_booking(
         set_flash(redirect, "error", error)
         return redirect
 
+    # пересчитываем логистику на сервере (не доверяем полю из формы)
+    logistics = logistics_for_address(address.strip())
+    if not logistics["ok"]:
+        set_flash(redirect, "error", logistics["reason"])
+        return redirect
+
     db.add(
         Booking(
             equipment_id=equipment_id,
@@ -97,6 +113,7 @@ def create_booking(
             address=address.strip(),
             customer_name=name.strip(),
             customer_phone=phone.strip(),
+            logistics_cost=logistics["cost"],
             status=BookingStatus.PENDING,
         )
     )

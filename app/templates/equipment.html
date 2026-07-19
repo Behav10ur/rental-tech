@@ -45,7 +45,7 @@
 <div class="card">
   <h2 style="font-size:16px;margin-top:0">Оформить заявку</h2>
 
-  <form method="post" action="/equipment/{{ item.id }}/book">
+  <form method="post" action="/equipment/{{ item.id }}/book" id="booking-form">
     <label>Дата</label>
     <input type="date" name="date" id="date" required>
 
@@ -72,7 +72,12 @@
     <input type="tel" name="phone" placeholder="+7" required>
 
     <label>Адрес объекта</label>
-    <input type="text" name="address" required>
+    <input type="text" name="address" id="address" required>
+    <button type="button" id="calc-delivery" style="width:auto;padding:6px 12px;margin-top:8px;font-size:13px;background:#555">
+      Рассчитать доставку
+    </button>
+    <div id="delivery-result" style="font-size:14px;margin-top:8px"></div>
+    <input type="hidden" name="logistics_cost" id="logistics_cost" value="0">
 
     <label style="display:flex;gap:8px;align-items:center;margin-top:16px">
       <input type="checkbox" name="agree" value="1" required style="width:auto">
@@ -104,7 +109,7 @@
       tooShort.style.display = "none";
       return;
     }
-
+    let deliveryCost = 0;
     const [fh, fm] = from.split(":").map(Number);
     const [th, tm] = to.split(":").map(Number);
     const rawHours = (th * 60 + tm - (fh * 60 + fm)) / 60;
@@ -123,7 +128,7 @@
 
     const billedHours = Math.ceil(rawHours);          // округляем вверх
     const rent = billedHours * RATE;
-    const total = rent + DEPOSIT;
+    const total = rent + DEPOSIT + deliveryCost;
 
     // подсказка, если фактическое время не целое
     const note = billedHours !== rawHours
@@ -135,6 +140,7 @@
     calc.innerHTML = `
       <div class="row"><span class="muted">Аренда (${billedHours} ч × ${fmt(RATE)} ₽)</span><span>${fmt(rent)} ₽</span></div>
       <div class="row"><span class="muted">Залог (возвращается)</span><span>${fmt(DEPOSIT)} ₽</span></div>
+      ${deliveryCost > 0 ? `<div class="row"><span class="muted">Доставка</span><span>${fmt(deliveryCost)} ₽</span></div>` : ""}
       <div class="row" style="border-top:1px solid #ddd;margin-top:6px;padding-top:6px">
         <span><b>К оплате</b></span><span><b>${fmt(total)} ₽</b></span>
       </div>
@@ -144,5 +150,134 @@
 
   document.getElementById("time_from").addEventListener("change", recalc);
   document.getElementById("time_to").addEventListener("change", recalc);
+
+  document.getElementById("calc-delivery").addEventListener("click", async () => {
+    const address = document.getElementById("address").value.trim();
+    const box = document.getElementById("delivery-result");
+
+    if (!address) {
+      box.innerHTML = `<span style="color:#c00">Введите адрес объекта.</span>`;
+      return;
+    }
+
+    box.textContent = "Считаем...";
+
+    const form = new FormData();
+    form.append("address", address);
+
+    try {
+      const resp = await fetch("/api/logistics", { method: "POST", body: form });
+      const data = await resp.json();
+
+      if (!data.ok) {
+        deliveryCost = 0;
+        document.getElementById("logistics_cost").value = 0;
+        box.innerHTML = `<span style="color:#c00">${data.reason}</span>`;
+        recalc();
+        return;
+      }
+
+      deliveryCost = data.cost;
+      document.getElementById("logistics_cost").value = data.cost;
+
+      if (data.cost === 0) {
+        box.innerHTML = `<span style="color:#080">В черте города — доставка бесплатно (${data.distance_km} км).</span>`;
+      } else {
+        box.innerHTML = `<span style="color:#080">Доставка: ${fmt(data.cost)} ₽ (${data.extra_km} км сверх объездной).</span>`;
+      }
+      recalc();
+    } catch {
+      box.innerHTML = `<span style="color:#c00">Ошибка расчёта. Попробуйте ещё раз.</span>`;
+    }
+  });
+
+// --- Сохранение/восстановление ввода (переживает редирект) ---
+  const FORM_KEY = "booking_form_{{ item.id }}";
+  const fields = ["date", "time_from", "time_to", "name", "phone", "address"];
+
+  function saveForm() {
+    const data = {};
+    fields.forEach(f => {
+      const el = document.querySelector(`[name="${f}"]`);
+      if (el) data[f] = el.value;
+    });
+    sessionStorage.setItem(FORM_KEY, JSON.stringify(data));
+  }
+
+  function restoreForm() {
+    const raw = sessionStorage.getItem(FORM_KEY);
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      fields.forEach(f => {
+        const el = document.querySelector(`[name="${f}"]`);
+        if (el && data[f]) el.value = data[f];
+      });
+      recalc();  // пересчитать аренду по восстановленным полям
+    } catch {}
+  }
+
+  // сохраняем при каждом изменении
+  fields.forEach(f => {
+    const el = document.querySelector(`[name="${f}"]`);
+    if (el) el.addEventListener("input", saveForm);
+  });
+
+  // восстанавливаем при загрузке страницы
+  restoreForm();
+
+  // --- Клиентская валидация перед отправкой ---
+  const WORK_START = {{ work_start }};
+  const WORK_END = {{ work_end }};
+
+  function validateBeforeSubmit() {
+    const date = document.getElementById("date").value;
+    const from = document.getElementById("time_from").value;
+    const to = document.getElementById("time_to").value;
+
+    if (!date || !from || !to) return "Заполните дату и время.";
+
+    const start = new Date(`${date}T${from}`);
+    const end = new Date(`${date}T${to}`);
+
+    if (end <= start) return "Время окончания должно быть позже начала.";
+    if (start < new Date()) return "Нельзя забронировать время в прошлом.";
+
+    const hours = (end - start) / 3600000;
+    if (hours < MIN_HOURS) return `Минимальное время аренды — ${MIN_HOURS} часа.`;
+
+    const [fh, fm] = from.split(":").map(Number);
+    const [th, tm] = to.split(":").map(Number);
+    const endHour = th + (tm > 0 ? 1 : 0);
+    if (fh < WORK_START || endHour > WORK_END) {
+      return `Бронирование доступно с ${WORK_START}:00 до ${WORK_END}:00.`;
+    }
+
+    return null;  // ошибок нет
+  }
+
+  document.getElementById("booking-form").addEventListener("submit", (e) => {
+    const error = validateBeforeSubmit();
+    if (error) {
+      e.preventDefault();  // не отправляем
+      const box = document.getElementById("too-short");
+      box.textContent = error;
+      box.style.display = "block";
+      return;
+    }
+    // валидно — форму отправляем, ввод уже в sessionStorage
+  });
+
+  // если заявка отправлена успешно — чистим черновик
+  {% if success %}
+    sessionStorage.removeItem(FORM_KEY);
+    fields.forEach(f => {
+      const el = document.querySelector(`[name="${f}"]`);
+      if (el) el.value = "";
+    });
+    document.getElementById("calc").style.display = "none";
+    document.getElementById("delivery-result").innerHTML = "";
+  {% endif %}
+
 </script>
 {% endblock %}
